@@ -40,11 +40,54 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 0 32px;
   font-family: Arial, sans-serif;
   font-size: 1.2rem;
   font-weight: 800;
   color: #1f1f1f;
+}
+
+.money-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.music-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2a2b33 0%, #16181f 100%);
+  color: #fdf6d8;
+  font-family: Arial, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.music-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.24);
+}
+
+.music-toggle:active {
+  transform: translateY(1px);
+}
+
+.music-toggle.is-muted {
+  background: linear-gradient(135deg, #5b2b2b 0%, #3b1b1b 100%);
+  color: #ffdede;
+}
+
+.music-toggle__icon {
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .content-row {

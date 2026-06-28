@@ -16,6 +16,8 @@ const enemyTypes = [
 const centerBox = document.querySelector('.center-box');
 const enemyLayer = document.querySelector('.enemy-layer');
 const moneyBox = document.querySelector('.money-box');
+const moneyDisplay = document.getElementById('money-display');
+const musicToggleButton = document.getElementById('music-toggle');
 const pulseUpgradeButton = document.getElementById('pulse-upgrade');
 const enemyLimitUpgradeButton = document.getElementById('enemy-limit-upgrade');
 const doubleMoneyUpgradeButton = document.getElementById('double-money-upgrade');
@@ -35,18 +37,44 @@ const coinSound = new Audio('sound/drop-coin.mp3');
 coinSound.volume = 0.12;
 const levelUpSound = new Audio('sound/level-up.mp3');
 levelUpSound.volume = 0.15;
-const bgMusic = new Audio('sound/lofi-smooth.mp3');
+const bgMusic = new Audio('sound/lofi-smooth-cut.mp3');
 bgMusic.loop = true;
+bgMusic.preload = 'auto';
 bgMusic.volume = 0.06;
+bgMusic.muted = false;
 let cursorPosition = null;
 let dinheiro = 0;
 let isDoubleMoneyActive = false;
 let pulseDelay = 3000;
 let pulseTimer = null;
+let bgMusicStarted = false;
+let bgMusicEnabled = true;
+
+bgMusic.addEventListener('ended', () => {
+  if (bgMusicEnabled && !bgMusic.muted) {
+    bgMusic.currentTime = 0;
+    bgMusic.play().catch(() => {});
+  }
+});
 
 function updateMoneyDisplay() {
-  if (!moneyBox) return;
-  moneyBox.textContent = `Dinheiro: R$ ${dinheiro}`;
+  if (!moneyDisplay) return;
+  moneyDisplay.textContent = `Dinheiro: R$ ${dinheiro}`;
+}
+
+function updateMusicButton() {
+  if (!musicToggleButton) return;
+  const iconElement = musicToggleButton.querySelector('.music-toggle__icon');
+  const isMuted = !bgMusicEnabled || bgMusic.muted;
+  musicToggleButton.classList.toggle('is-muted', isMuted);
+  musicToggleButton.setAttribute('aria-pressed', String(!isMuted));
+  if (iconElement) {
+    iconElement.textContent = isMuted ? '🔇' : '♪';
+  }
+  const labelElement = musicToggleButton.querySelector('.music-toggle__label');
+  if (labelElement) {
+    labelElement.textContent = isMuted ? 'Som off' : 'Som on';
+  }
 }
 
 function addDinheiro(valor) {
@@ -284,6 +312,33 @@ function pulseCursor() {
   setTimeout(() => centerBox.classList.remove('pulse-cursor'), 160);
 }
 
+function startBackgroundMusic(force = false) {
+  if (!bgMusicEnabled) {
+    updateMusicButton();
+    return;
+  }
+  if (!bgMusicStarted || force) {
+    bgMusicStarted = true;
+    bgMusic.currentTime = 0;
+    bgMusic.muted = false;
+    bgMusic.play().catch(() => {});
+  }
+  updateMusicButton();
+}
+
+function toggleBackgroundMusic() {
+  if (!musicToggleButton) return;
+  if (bgMusicEnabled) {
+    bgMusicEnabled = false;
+    bgMusic.muted = true;
+  } else {
+    bgMusicEnabled = true;
+    bgMusic.muted = false;
+    startBackgroundMusic(true);
+  }
+  updateMusicButton();
+}
+
 if (pulseUpgradeButton) {
   pulseUpgradeButton.addEventListener('click', purchasePulseUpgrade);
 }
@@ -296,11 +351,17 @@ if (doubleMoneyUpgradeButton) {
   doubleMoneyUpgradeButton.addEventListener('click', purchaseDoubleMoneyUpgrade);
 }
 
+if (musicToggleButton) {
+  musicToggleButton.addEventListener('click', toggleBackgroundMusic);
+}
+
+document.addEventListener('pointerdown', () => startBackgroundMusic(true), { once: true });
+document.addEventListener('keydown', () => startBackgroundMusic(true), { once: true });
+
 window.addEventListener('load', () => {
   spawnWave();
   pulseCursor();
   startPulseTimer();
-  try {
-    bgMusic.play().catch(() => {});
-  } catch (e) {}
+  startBackgroundMusic(true);
+  updateMusicButton();
 });
