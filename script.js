@@ -23,6 +23,8 @@ const enemyLimitUpgradeButton = document.getElementById('enemy-limit-upgrade');
 const doubleMoneyUpgradeButton = document.getElementById('double-money-upgrade');
 const enemySize = 64;
 const hitRadius = 90;
+const hitMaskAlphaThreshold = 16;
+const hitMaskCache = new Map();
 const spawnDelayRange = [300, 800];
 const enemyCountRange = [1, 3];
 const speedRange = [30, 180];
@@ -172,6 +174,66 @@ function randomInt(min, max) {
   return Math.floor(randomBetween(min, max + 1));
 }
 
+function createHitMask(img) {
+  if (!img || !img.naturalWidth || !img.naturalHeight) {
+    return null;
+  }
+
+  const src = img.currentSrc || img.src;
+  const cachedMask = hitMaskCache.get(src);
+  if (cachedMask) {
+    return cachedMask;
+  }
+
+  const width = img.naturalWidth;
+  const height = img.naturalHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) {
+    return null;
+  }
+
+  context.drawImage(img, 0, 0, width, height);
+  const { data } = context.getImageData(0, 0, width, height);
+  const mask = new Uint8Array(width * height);
+
+  for (let index = 0; index < data.length; index += 4) {
+    const alpha = data[index + 3];
+    mask[index / 4] = alpha > hitMaskAlphaThreshold ? 1 : 0;
+  }
+
+  const hitMask = { width, height, mask };
+  hitMaskCache.set(src, hitMask);
+  return hitMask;
+}
+
+function isPointInsideEnemy(enemy, cursorX, cursorY) {
+  const hitMask = createHitMask(enemy);
+  if (!hitMask) {
+    const ex = Number(enemy.dataset.x);
+    const ey = Number(enemy.dataset.y);
+    const distance = Math.hypot(ex + enemySize / 2 - cursorX, ey + enemySize / 2 - cursorY);
+    return distance <= hitRadius;
+  }
+
+  const localX = cursorX - Number(enemy.dataset.x);
+  const localY = cursorY - Number(enemy.dataset.y);
+  const width = enemy.clientWidth || enemySize;
+  const height = enemy.clientHeight || enemySize;
+
+  if (localX < 0 || localY < 0 || localX >= width || localY >= height) {
+    return false;
+  }
+
+  const sampleX = Math.min(Math.max(Math.round((localX / width) * (hitMask.width - 1)), 0), hitMask.width - 1);
+  const sampleY = Math.min(Math.max(Math.round((localY / height) * (hitMask.height - 1)), 0), hitMask.height - 1);
+  const index = sampleY * hitMask.width + sampleX;
+  return hitMask.mask[index] === 1;
+}
+
 function getRandomEdgePosition() {
   const edge = randomInt(0, 3);
   const width = centerBox.clientWidth;
@@ -213,6 +275,10 @@ function spawnEnemy() {
   img.className = 'enemy';
   img.style.width = `${enemySize}px`;
   img.style.height = `${enemySize}px`;
+  img.addEventListener('load', () => createHitMask(img));
+  if (img.complete) {
+    createHitMask(img);
+  }
   const start = getRandomEdgePosition();
   img.dataset.x = start.x;
   img.dataset.y = start.y;
@@ -271,10 +337,7 @@ function hitEnemies() {
 
   const enemies = Array.from(enemyLayer.querySelectorAll('.enemy'));
   enemies.forEach(enemy => {
-    const ex = Number(enemy.dataset.x);
-    const ey = Number(enemy.dataset.y);
-    const distance = Math.hypot(ex + enemySize / 2 - cursorPosition.x, ey + enemySize / 2 - cursorPosition.y);
-    if (distance <= hitRadius) {
+    if (isPointInsideEnemy(enemy, cursorPosition.x, cursorPosition.y)) {
       const valor = Number(enemy.dataset.dinheiro) || 0;
       addDinheiro(valor);
       enemy.remove();
