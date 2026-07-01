@@ -54,13 +54,9 @@ let bgMusicStarted = false;
 let bgMusicEnabled = true;
 
 // SFX (efeitos sonoros) control
+// Garantir que os efeitos sonoros iniciem ligados
 let sfxEnabled = true;
-const storedSfx = (() => {
-  try { return localStorage.getItem('sfxEnabled'); } catch (e) { return null; }
-})();
-if (storedSfx !== null) {
-  sfxEnabled = storedSfx === 'true';
-}
+try { localStorage.setItem('sfxEnabled', 'true'); } catch (e) {}
 
 function updateSfxState() {
   const muted = !sfxEnabled;
@@ -81,6 +77,72 @@ function toggleSfx() {
   sfxEnabled = !sfxEnabled;
   try { localStorage.setItem('sfxEnabled', String(sfxEnabled)); } catch (e) {}
   updateSfxState();
+}
+
+// Explosion sprite handling (4x4 spritesheet)
+const explosionSpritePath = 'image/explosao/Explosion95CC0.png';
+const explosionImage = new Image();
+let explosionFrameWidth = 64;
+let explosionFrameHeight = 64;
+let explosionCols = 4;
+let explosionRows = 4;
+let explosionFrameCount = explosionCols * explosionRows;
+let explosionLoaded = false;
+explosionImage.src = explosionSpritePath;
+explosionImage.onload = () => {
+  explosionLoaded = true;
+  // use known 4x4 layout
+  explosionCols = 4;
+  explosionRows = 4;
+  explosionFrameCount = explosionCols * explosionRows;
+  explosionFrameWidth = Math.floor(explosionImage.naturalWidth / explosionCols) || explosionFrameWidth;
+  explosionFrameHeight = Math.floor(explosionImage.naturalHeight / explosionRows) || explosionFrameHeight;
+};
+
+function createExplosion(x, y, options = {}) {
+  const scale = options.scale || 1;
+  const fps = options.fps || 30;
+  const frameW = explosionFrameWidth * scale;
+  const frameH = explosionFrameHeight * scale;
+
+  const el = document.createElement('div');
+  el.className = 'explosion';
+  el.style.position = 'absolute';
+  el.style.width = `${frameW}px`;
+  el.style.height = `${frameH}px`;
+  el.style.pointerEvents = 'none';
+  el.style.backgroundImage = `url('${explosionSpritePath}')`;
+  el.style.backgroundRepeat = 'no-repeat';
+  // total background size must account for cols and rows
+  el.style.backgroundSize = `${explosionFrameWidth * explosionCols * scale}px ${explosionFrameHeight * explosionRows * scale}px`;
+  // place centered at (x,y) using same transform-based coordinates as enemies
+  el.style.transform = `translate(${x - frameW / 2}px, ${y - frameH / 2}px)`;
+  enemyLayer.appendChild(el);
+
+  let frame = 0;
+  const frameDuration = 1000 / fps;
+  let last = performance.now();
+
+  function step(now) {
+    if (now - last >= frameDuration) {
+      // update to next frame (show only one frame at a time)
+      const col = frame % explosionCols;
+      const row = Math.floor(frame / explosionCols);
+      const posX = -(col * explosionFrameWidth * scale);
+      const posY = -(row * explosionFrameHeight * scale);
+      el.style.backgroundPosition = `${posX}px ${posY}px`;
+      frame++;
+      last = now;
+    }
+    if (frame < explosionFrameCount) {
+      requestAnimationFrame(step);
+    } else {
+      el.remove();
+    }
+  }
+
+  // start with first frame immediately
+  requestAnimationFrame(step);
 }
 
 bgMusic.addEventListener('ended', () => {
@@ -371,6 +433,12 @@ function hitEnemies() {
     if (isPointInsideEnemy(enemy, cursorPosition.x, cursorPosition.y)) {
       const valor = Number(enemy.dataset.dinheiro) || 0;
       addDinheiro(valor);
+      // criar efeito de explosão no local do inimigo antes de remover (usar centro real do elemento)
+      const ex = Number(enemy.dataset.x) || 0;
+      const ey = Number(enemy.dataset.y) || 0;
+      const ew = enemy.clientWidth || enemySize;
+      const eh = enemy.clientHeight || enemySize;
+      try { createExplosion(ex + ew / 2, ey + eh / 2); } catch (e) {}
       enemy.remove();
       try {
         coinSound.currentTime = 0;
