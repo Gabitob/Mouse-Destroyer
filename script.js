@@ -1,16 +1,16 @@
 const enemyTypes = [
-  { src: 'image/inimigos/Boneco-Azul.gif', dinheiro: 18 },
+  { src: 'image/inimigos/Boneco-Azul.gif', dinheiro: 15 },
   { src: 'image/inimigos/Creepy.gif', dinheiro: 20 },
-  { src: 'image/inimigos/demon_skeleton.png', dinheiro: 28 },
-  { src: 'image/inimigos/Emo.gif', dinheiro: 22 },
-  { src: 'image/inimigos/Gato-Rosa.gif', dinheiro: 16 },
-  { src: 'image/inimigos/Ghosst.gif', dinheiro: 24 },
-  { src: 'image/inimigos/khorneBerzerker.png', dinheiro: 30 },
-  { src: 'image/inimigos/Olho.gif', dinheiro: 14 },
-  { src: 'image/inimigos/pisilohe10.png', dinheiro: 26 },
-  { src: 'image/inimigos/skeleton_elite.png', dinheiro: 32 },
-  { src: 'image/inimigos/SmileFace.png', dinheiro: 12 },
-  { src: 'image/inimigos/SurpriseFace.png', dinheiro: 15 }
+  { src: 'image/inimigos/demon_skeleton.png', dinheiro: 20 },
+  { src: 'image/inimigos/Emo.gif', dinheiro: 25 },
+  { src: 'image/inimigos/Gato-Rosa.gif', dinheiro: 30 },
+  { src: 'image/inimigos/Ghosst.gif', dinheiro: 40 },
+  { src: 'image/inimigos/khorneBerzerker.png', dinheiro: 20 },
+  { src: 'image/inimigos/Olho.gif', dinheiro: 50 },
+  { src: 'image/inimigos/pisilohe10.png', dinheiro: 25 },
+  { src: 'image/inimigos/skeleton_elite.png', dinheiro: 15 },
+  { src: 'image/inimigos/SmileFace.png', dinheiro: 10 },
+  { src: 'image/inimigos/SurpriseFace.png', dinheiro: 10 }
 ];
 
 const centerBox = document.querySelector('.center-box');
@@ -18,6 +18,7 @@ const enemyLayer = document.querySelector('.enemy-layer');
 const moneyBox = document.querySelector('.money-box');
 const moneyDisplay = document.getElementById('money-display');
 const musicToggleButton = document.getElementById('music-toggle');
+const sfxToggleButton = document.getElementById('sfx-toggle');
 const pulseUpgradeButton = document.getElementById('pulse-upgrade');
 const enemyLimitUpgradeButton = document.getElementById('enemy-limit-upgrade');
 const doubleMoneyUpgradeButton = document.getElementById('double-money-upgrade');
@@ -51,6 +52,36 @@ let pulseDelay = 3000;
 let pulseTimer = null;
 let bgMusicStarted = false;
 let bgMusicEnabled = true;
+
+// SFX (efeitos sonoros) control
+let sfxEnabled = true;
+const storedSfx = (() => {
+  try { return localStorage.getItem('sfxEnabled'); } catch (e) { return null; }
+})();
+if (storedSfx !== null) {
+  sfxEnabled = storedSfx === 'true';
+}
+
+function updateSfxState() {
+  const muted = !sfxEnabled;
+  try { shootSound.muted = muted; } catch (e) {}
+  try { coinSound.muted = muted; } catch (e) {}
+  try { levelUpSound.muted = muted; } catch (e) {}
+  if (sfxToggleButton) {
+    sfxToggleButton.classList.toggle('is-muted', muted);
+    sfxToggleButton.setAttribute('aria-pressed', String(!muted));
+    const icon = sfxToggleButton.querySelector('.music-toggle__icon');
+    if (icon) icon.textContent = muted ? '🔇' : '🔊';
+    const label = sfxToggleButton.querySelector('.music-toggle__label');
+    if (label) label.textContent = muted ? 'Efeitos off' : 'Efeitos on';
+  }
+}
+
+function toggleSfx() {
+  sfxEnabled = !sfxEnabled;
+  try { localStorage.setItem('sfxEnabled', String(sfxEnabled)); } catch (e) {}
+  updateSfxState();
+}
 
 bgMusic.addEventListener('ended', () => {
   if (bgMusicEnabled && !bgMusic.muted) {
@@ -417,6 +448,9 @@ if (doubleMoneyUpgradeButton) {
 if (musicToggleButton) {
   musicToggleButton.addEventListener('click', toggleBackgroundMusic);
 }
+if (sfxToggleButton) {
+  sfxToggleButton.addEventListener('click', toggleSfx);
+}
 
 document.addEventListener('pointerdown', () => startBackgroundMusic(true), { once: true });
 document.addEventListener('keydown', () => startBackgroundMusic(true), { once: true });
@@ -427,4 +461,5 @@ window.addEventListener('load', () => {
   startPulseTimer();
   startBackgroundMusic(true);
   updateMusicButton();
+  updateSfxState();
 });
