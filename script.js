@@ -22,6 +22,9 @@ const sfxToggleButton = document.getElementById('sfx-toggle');
 const pulseUpgradeButton = document.getElementById('pulse-upgrade');
 const enemyLimitUpgradeButton = document.getElementById('enemy-limit-upgrade');
 const doubleMoneyUpgradeButton = document.getElementById('double-money-upgrade');
+const explosionDurationUpgradeButton = document.getElementById('explosion-duration-upgrade');
+const cigaretteUpgradeButton = document.getElementById('cigarette-upgrade');
+const cigaretteChanceUpgradeButton = document.getElementById('cigarette-chance-upgrade');
 const enemySize = 64;
 const hitRadius = 90;
 const hitMaskAlphaThreshold = 16;
@@ -33,6 +36,9 @@ let maxActiveEnemies = 5;
 const pulseUpgradeCost = 200;
 const enemyLimitUpgradeCost = 50;
 const doubleMoneyUpgradeCost = 150;
+const explosionDurationUpgradeCost = 100;
+const cigaretteUpgradeCost = 300;
+const cigaretteChanceUpgradeCost = 1000;
 const upgradeCostIncrease = 200;
 const shootSound = new Audio('sound/retro-laser.mp3');
 shootSound.volume = 0.09;
@@ -52,9 +58,11 @@ let pulseDelay = 3000;
 let pulseTimer = null;
 let bgMusicStarted = false;
 let bgMusicEnabled = true;
+let explosionDurationMultiplier = 1;
+let isCigaretteActive = false;
+let cigaretteChance = 0.3;
+const activeProjectiles = new Set();
 
-// SFX (efeitos sonoros) control
-// Garantir que os efeitos sonoros iniciem ligados
 let sfxEnabled = true;
 try { localStorage.setItem('sfxEnabled', 'true'); } catch (e) {}
 
@@ -79,7 +87,6 @@ function toggleSfx() {
   updateSfxState();
 }
 
-// Explosion sprite handling (4x4 spritesheet)
 const explosionSpritePath = 'image/explosao/Explosion95CC0.png';
 const explosionImage = new Image();
 let explosionFrameWidth = 64;
@@ -88,10 +95,10 @@ let explosionCols = 4;
 let explosionRows = 4;
 let explosionFrameCount = explosionCols * explosionRows;
 let explosionLoaded = false;
+const activeExplosions = new Set();
 explosionImage.src = explosionSpritePath;
 explosionImage.onload = () => {
   explosionLoaded = true;
-  // use known 4x4 layout
   explosionCols = 4;
   explosionRows = 4;
   explosionFrameCount = explosionCols * explosionRows;
@@ -104,6 +111,7 @@ function createExplosion(x, y, options = {}) {
   const fps = options.fps || 30;
   const frameW = explosionFrameWidth * scale;
   const frameH = explosionFrameHeight * scale;
+  const radius = Math.max(frameW, frameH) / 2;
 
   const el = document.createElement('div');
   el.className = 'explosion';
@@ -113,19 +121,19 @@ function createExplosion(x, y, options = {}) {
   el.style.pointerEvents = 'none';
   el.style.backgroundImage = `url('${explosionSpritePath}')`;
   el.style.backgroundRepeat = 'no-repeat';
-  // total background size must account for cols and rows
   el.style.backgroundSize = `${explosionFrameWidth * explosionCols * scale}px ${explosionFrameHeight * explosionRows * scale}px`;
-  // place centered at (x,y) using same transform-based coordinates as enemies
   el.style.transform = `translate(${x - frameW / 2}px, ${y - frameH / 2}px)`;
   enemyLayer.appendChild(el);
 
+  const explosionData = { x, y, radius, el };
+  activeExplosions.add(explosionData);
+
   let frame = 0;
-  const frameDuration = 1000 / fps;
+  const frameDuration = (1000 / fps) * explosionDurationMultiplier;
   let last = performance.now();
 
   function step(now) {
     if (now - last >= frameDuration) {
-      // update to next frame (show only one frame at a time)
       const col = frame % explosionCols;
       const row = Math.floor(frame / explosionCols);
       const posX = -(col * explosionFrameWidth * scale);
@@ -138,11 +146,70 @@ function createExplosion(x, y, options = {}) {
       requestAnimationFrame(step);
     } else {
       el.remove();
+      activeExplosions.delete(explosionData);
     }
   }
 
-  // start with first frame immediately
   requestAnimationFrame(step);
+}
+
+function createProjectile(x, y) {
+  const el = document.createElement('img');
+  el.src = 'image/projetil/Cigar.png';
+  el.className = 'projectile';
+  el.style.position = 'absolute';
+  el.style.width = '32px';
+  el.style.height = '32px';
+  el.style.pointerEvents = 'none';
+  el.style.transform = `translate(${x - 16}px, ${y - 16}px)`;
+  enemyLayer.appendChild(el);
+
+  const angle = Math.random() * Math.PI * 2;
+  const speed = 300;
+  const vx = Math.cos(angle) * speed;
+  const vy = Math.sin(angle) * speed;
+
+  const projectile = { x, y, vx, vy, el };
+  activeProjectiles.add(projectile);
+
+  return projectile;
+}
+
+function updateProjectiles(deltaTime) {
+  const toRemove = [];
+
+  for (const projectile of activeProjectiles) {
+    projectile.x += projectile.vx * deltaTime;
+    projectile.y += projectile.vy * deltaTime;
+    projectile.el.style.transform = `translate(${projectile.x - 16}px, ${projectile.y - 16}px)`;
+
+    const width = centerBox.clientWidth;
+    const height = centerBox.clientHeight;
+
+    if (projectile.x < -50 || projectile.x > width + 50 || projectile.y < -50 || projectile.y > height + 50) {
+      toRemove.push(projectile);
+      continue;
+    }
+
+    const enemies = Array.from(enemyLayer.querySelectorAll('.enemy'));
+    for (const enemy of enemies) {
+      const ex = Number(enemy.dataset.x) || 0;
+      const ey = Number(enemy.dataset.y) || 0;
+      const ew = enemy.clientWidth || enemySize;
+      const eh = enemy.clientHeight || enemySize;
+
+      if (projectile.x >= ex && projectile.x <= ex + ew && projectile.y >= ey && projectile.y <= ey + eh) {
+        destroyEnemy(enemy);
+        toRemove.push(projectile);
+        break;
+      }
+    }
+  }
+
+  for (const projectile of toRemove) {
+    projectile.el.remove();
+    activeProjectiles.delete(projectile);
+  }
 }
 
 bgMusic.addEventListener('ended', () => {
@@ -188,7 +255,22 @@ function updateUpgradeCost(button) {
   const newCost = currentCost + upgradeCostIncrease;
   const label = button.dataset.label || button.textContent.split(' - ')[0];
   button.dataset.cost = newCost;
-  button.textContent = `${label} - R$ ${newCost}`;
+
+  let speedIncrease = '';
+  if (button.id === 'pulse-upgrade') {
+    const currentPulsesPerSecond = 1000 / pulseDelay;
+    const newPulseDelay = Math.max(500, pulseDelay - 1000);
+    const newPulsesPerSecond = 1000 / newPulseDelay;
+    const percentage = Math.round((newPulsesPerSecond - currentPulsesPerSecond) / currentPulsesPerSecond * 100);
+    speedIncrease = ` (+${percentage}%)`;
+  }
+
+  if (button.id === 'explosion-duration-upgrade') {
+    const percentage = Math.round(0.5 / explosionDurationMultiplier * 100);
+    speedIncrease = ` (+${percentage}%)`;
+  }
+
+  button.textContent = `${label}${speedIncrease} - R$ ${newCost}`;
 }
 
 function startPulseTimer() {
@@ -244,6 +326,52 @@ function purchaseDoubleMoneyUpgrade() {
   isDoubleMoneyActive = true;
   try { levelUpSound.currentTime = 0; levelUpSound.play().catch(() => {}); } catch (e) {}
   removeUpgradeButton(doubleMoneyUpgradeButton);
+}
+
+function purchaseExplosionDurationUpgrade() {
+  if (!explosionDurationUpgradeButton) return;
+  const cost = Number(explosionDurationUpgradeButton.dataset.cost) || explosionDurationUpgradeCost;
+  if (!canBuyUpgrade(cost)) {
+    return;
+  }
+  dinheiro -= cost;
+  updateMoneyDisplay();
+  explosionDurationMultiplier += 0.5;
+  try { levelUpSound.currentTime = 0; levelUpSound.play().catch(() => {}); } catch (e) {}
+  updateUpgradeCost(explosionDurationUpgradeButton);
+  const newCost = Number(explosionDurationUpgradeButton.dataset.cost) || 0;
+  if (newCost > 400) {
+    removeUpgradeButton(explosionDurationUpgradeButton);
+  }
+}
+
+function purchaseCigaretteUpgrade() {
+  if (!cigaretteUpgradeButton) return;
+  const cost = Number(cigaretteUpgradeButton.dataset.cost) || cigaretteUpgradeCost;
+  if (!canBuyUpgrade(cost)) {
+    return;
+  }
+  dinheiro -= cost;
+  updateMoneyDisplay();
+  isCigaretteActive = true;
+  try { levelUpSound.currentTime = 0; levelUpSound.play().catch(() => {}); } catch (e) {}
+  removeUpgradeButton(cigaretteUpgradeButton);
+  if (cigaretteChanceUpgradeButton) {
+    cigaretteChanceUpgradeButton.style.display = '';
+  }
+}
+
+function purchaseCigaretteChanceUpgrade() {
+  if (!cigaretteChanceUpgradeButton) return;
+  const cost = Number(cigaretteChanceUpgradeButton.dataset.cost) || cigaretteChanceUpgradeCost;
+  if (!canBuyUpgrade(cost)) {
+    return;
+  }
+  dinheiro -= cost;
+  updateMoneyDisplay();
+  cigaretteChance += 0.3;
+  try { levelUpSound.currentTime = 0; levelUpSound.play().catch(() => {}); } catch (e) {}
+  removeUpgradeButton(cigaretteChanceUpgradeButton);
 }
 
 function removeUpgradeButton(button) {
@@ -425,28 +553,114 @@ function spawnEnemy() {
   requestAnimationFrame(animate);
 }
 
+function checkExplosionCollision(enemy) {
+  const ex = Number(enemy.dataset.x) || 0;
+  const ey = Number(enemy.dataset.y) || 0;
+  const ew = enemy.clientWidth || enemySize;
+  const eh = enemy.clientHeight || enemySize;
+
+  for (const explosion of activeExplosions) {
+    const distance = Math.hypot((ex + ew / 2) - explosion.x, (ey + eh / 2) - explosion.y);
+    if (distance < explosion.radius + hitRadius) {
+      const hitMask = createHitMask(enemy);
+      if (hitMask) {
+        const checkPoints = [];
+        const steps = 8;
+        for (let i = 0; i < steps; i++) {
+          const angle = (i / steps) * Math.PI * 2;
+          checkPoints.push({
+            x: explosion.x + Math.cos(angle) * explosion.radius * 0.7,
+            y: explosion.y + Math.sin(angle) * explosion.radius * 0.7
+          });
+        }
+        checkPoints.push({ x: explosion.x, y: explosion.y });
+
+        for (const point of checkPoints) {
+          const localX = point.x - ex;
+          const localY = point.y - ey;
+
+          if (localX >= 0 && localY >= 0 && localX < ew && localY < eh) {
+            const sampleX = Math.min(Math.max(Math.round((localX / ew) * (hitMask.width - 1)), 0), hitMask.width - 1);
+            const sampleY = Math.min(Math.max(Math.round((localY / eh) * (hitMask.height - 1)), 0), hitMask.height - 1);
+            const index = sampleY * hitMask.width + sampleX;
+            if (hitMask.mask[index] === 1) {
+              return true;
+            }
+          }
+        }
+      } else {
+        const distance = Math.hypot((ex + ew / 2) - explosion.x, (ey + eh / 2) - explosion.y);
+        if (distance <= hitRadius) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function destroyEnemy(enemy) {
+  const valor = Number(enemy.dataset.dinheiro) || 0;
+  addDinheiro(valor);
+  const ex = Number(enemy.dataset.x) || 0;
+  const ey = Number(enemy.dataset.y) || 0;
+  const ew = enemy.clientWidth || enemySize;
+  const eh = enemy.clientHeight || enemySize;
+  try { createExplosion(ex + ew / 2, ey + eh / 2); } catch (e) {}
+
+  if (isCigaretteActive && Math.random() < cigaretteChance) {
+    createProjectile(ex + ew / 2, ey + eh / 2);
+  }
+
+  enemy.remove();
+  try {
+    coinSound.currentTime = 0;
+    coinSound.play().catch(() => {});
+  } catch (e) {}
+  refillEnemies();
+}
+
 function hitEnemies() {
   if (!cursorPosition) return;
 
   const enemies = Array.from(enemyLayer.querySelectorAll('.enemy'));
   enemies.forEach(enemy => {
     if (isPointInsideEnemy(enemy, cursorPosition.x, cursorPosition.y)) {
-      const valor = Number(enemy.dataset.dinheiro) || 0;
-      addDinheiro(valor);
-      // criar efeito de explosão no local do inimigo antes de remover (usar centro real do elemento)
-      const ex = Number(enemy.dataset.x) || 0;
-      const ey = Number(enemy.dataset.y) || 0;
-      const ew = enemy.clientWidth || enemySize;
-      const eh = enemy.clientHeight || enemySize;
-      try { createExplosion(ex + ew / 2, ey + eh / 2); } catch (e) {}
-      enemy.remove();
-      try {
-        coinSound.currentTime = 0;
-        coinSound.play().catch(() => {});
-      } catch (e) {}
-      refillEnemies();
+      destroyEnemy(enemy);
     }
   });
+}
+
+function checkExplosionChainReaction() {
+  if (activeExplosions.size === 0) {
+    requestAnimationFrame(checkExplosionChainReaction);
+    return;
+  }
+
+  const enemies = Array.from(enemyLayer.querySelectorAll('.enemy'));
+  const enemiesToDestroy = [];
+
+  enemies.forEach(enemy => {
+    if (checkExplosionCollision(enemy)) {
+      enemiesToDestroy.push(enemy);
+    }
+  });
+
+  enemiesToDestroy.forEach(enemy => {
+    destroyEnemy(enemy);
+  });
+
+  requestAnimationFrame(checkExplosionChainReaction);
+}
+
+let lastTime = performance.now();
+
+function gameLoop(now) {
+  const deltaTime = (now - lastTime) / 1000;
+  lastTime = now;
+
+  updateProjectiles(deltaTime);
+  requestAnimationFrame(gameLoop);
 }
 
 function refillEnemies() {
@@ -513,6 +727,18 @@ if (doubleMoneyUpgradeButton) {
   doubleMoneyUpgradeButton.addEventListener('click', purchaseDoubleMoneyUpgrade);
 }
 
+if (explosionDurationUpgradeButton) {
+  explosionDurationUpgradeButton.addEventListener('click', purchaseExplosionDurationUpgrade);
+}
+
+if (cigaretteUpgradeButton) {
+  cigaretteUpgradeButton.addEventListener('click', purchaseCigaretteUpgrade);
+}
+
+if (cigaretteChanceUpgradeButton) {
+  cigaretteChanceUpgradeButton.addEventListener('click', purchaseCigaretteChanceUpgrade);
+}
+
 if (musicToggleButton) {
   musicToggleButton.addEventListener('click', toggleBackgroundMusic);
 }
@@ -530,4 +756,6 @@ window.addEventListener('load', () => {
   startBackgroundMusic(true);
   updateMusicButton();
   updateSfxState();
+  checkExplosionChainReaction();
+  gameLoop(performance.now());
 });
